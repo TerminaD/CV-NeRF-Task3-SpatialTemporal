@@ -89,6 +89,7 @@ def render_rays(rays: torch.Tensor,
     near = rays[0][6]
     far = rays[0][7]
     
+    times = times[:, None]
     assert times.shape == torch.Size([ray_num, 1])
     
     bin_size_coarse = (far - near) / sample_num_coarse
@@ -165,7 +166,7 @@ def render_rays(rays: torch.Tensor,
     
     xyz_dir_time_encoded_all = torch.cat((xyzs_encoded_all, dir_encoded_all, time_encoded_all), dim=1)
     
-    results_all = nerf_fine(xyz_dir_time_encoded_all, sigma_only=False)
+    results_all = nerf_fine(xyz_dir_time_encoded_all)
     
     # Unpack fine results
     rgbs_all = results_all[:, :3]
