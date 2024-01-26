@@ -55,6 +55,7 @@ def sample_pdf(bins, weights, N_importance, det=False, eps=1e-5):
 
 
 def render_rays(rays: torch.Tensor,
+                times,
                 sample_num_coarse: int,
                 sample_num_fine: int,
                 nerf_coarse: NeRF,
@@ -99,6 +100,8 @@ def render_rays(rays: torch.Tensor,
     xyzs_coarse = rays_o + rays_d * rearrange(depths_coarse, 'n1 n2 -> n2 n1 1').to(device)
     xyzs_coarse = rearrange(xyzs_coarse, 'sample ray xyz -> ray sample xyz') # Shape: ray_num * sample_num_coarse * 3
     xyzs_coarse = rearrange(xyzs_coarse, 'ray sample xyz -> (ray sample) xyz') # Assume first axis is ray
+    
+    # TODO: cat times
     
     deltas_coarse = torch.diff(depths_coarse, dim=1)
     deltas_coarse = torch.cat((deltas_coarse, 1e7 * torch.ones((ray_num, 1)).to(device)), dim=1)

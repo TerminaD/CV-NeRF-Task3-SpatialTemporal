@@ -15,6 +15,7 @@ class NeRF(nn.Module):
                  W=256,
                  in_channels_xyz=60, 
                  in_channels_dir=24, 
+                 in_channels_time=8,
                  skips=[4]):
         """
         D: number of layers for density (sigma) encoder
@@ -28,14 +29,15 @@ class NeRF(nn.Module):
         self.W = W
         self.in_channels_xyz = in_channels_xyz
         self.in_channels_dir = in_channels_dir
+        self.in_channels_time = in_channels_time
         self.skips = skips
 
         # xyz encoding layers
         for i in range(D):
             if i == 0:
-                layer = nn.Linear(in_channels_xyz, W)
+                layer = nn.Linear(in_channels_xyz+in_channels_time, W)
             elif i in skips:
-                layer = nn.Linear(W+in_channels_xyz, W)
+                layer = nn.Linear(W+in_channels_xyz+in_channels_time, W)
             else:
                 layer = nn.Linear(W, W)
             layer = nn.Sequential(layer, nn.ReLU(True))
@@ -55,7 +57,7 @@ class NeRF(nn.Module):
                         nn.Sigmoid())
         
 
-    def forward(self, x, sigma_only=False):
+    def forward(self, x):
         """
         Encodes input (xyz+dir) to rgb+sigma (not ready to render yet).
         For rendering this ray, please see rendering.py
@@ -72,21 +74,16 @@ class NeRF(nn.Module):
             else:
                 out: (B, 4), rgb and sigma
         """
-        if not sigma_only:
-            input_xyz, input_dir = \
-                torch.split(x, [self.in_channels_xyz, self.in_channels_dir], dim=-1)
-        else:
-            input_xyz = x
+        input_xyz, input_dir, input_time = \
+        torch.split(x, [self.in_channels_xyz, self.in_channels_dir, self.in_channels_time], dim=-1)
 
-        xyz_ = input_xyz
+        xyz_ = torch.concat([input_xyz, input_time], -1)
         for i in range(self.D):
             if i in self.skips:
-                xyz_ = torch.cat([input_xyz, xyz_], -1)
+                xyz_ = torch.cat([input_xyz, input_time, xyz_], -1)
             xyz_ = getattr(self, f"xyz_encoding_{i+1}")(xyz_)
 
         sigma = self.sigma(xyz_)
-        if sigma_only:
-            return sigma
 
         xyz_encoding_final = self.xyz_encoding_final(xyz_)
 

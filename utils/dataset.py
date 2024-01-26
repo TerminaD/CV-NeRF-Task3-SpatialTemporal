@@ -53,6 +53,7 @@ class BlenderDataset(Dataset):
             self.poses = []
             self.all_rays = []
             self.all_rgbs = []
+            self.all_times = []
             for frame in self.meta['frames']:
                 pose = np.array(frame['transform_matrix'])[:3, :4]
                 self.poses += [pose]
@@ -73,9 +74,15 @@ class BlenderDataset(Dataset):
                                              self.near*torch.ones_like(rays_o[:, :1]),
                                              self.far*torch.ones_like(rays_o[:, :1])],
                                              1)] # (h*w, 8)
+                
+                self.all_times += frame['time']
 
             self.all_rays = torch.cat(self.all_rays, 0) # (len(self.meta['frames])*h*w, 8)
             self.all_rgbs = torch.cat(self.all_rgbs, 0) # (len(self.meta['frames])*h*w, 3)
+            
+            self.all_times = torch.repeat_interleave(torch.tensor(self.all_times), w*h, 0)
+            assert self.all_times.shape == torch.Size([len(self.meta['frames'])*h*w])
+            
 
     def __len__(self):
         if self.split == 'train':
@@ -87,7 +94,8 @@ class BlenderDataset(Dataset):
     def __getitem__(self, idx):
         if self.split == 'train': # use data in the buffers
             sample = {'rays': self.all_rays[idx],
-                      'rgbs': self.all_rgbs[idx]}
+                      'rgbs': self.all_rgbs[idx],
+                      'times': self.all_times[idx]}
 
         else: # create data for each image separately
             frame = self.meta['frames'][idx]
@@ -96,7 +104,6 @@ class BlenderDataset(Dataset):
             img = Image.open(os.path.join(self.root_dir, f"{frame['file_path']}.png"))
             img = img.resize(self.img_wh, Image.LANCZOS)
             img = self.transform(img) # (4, H, W)
-            valid_mask = (img[-1]>0).flatten() # (H*W) valid color area
             img = img.view(4, -1).permute(1, 0) # (H*W, 4) RGBA
             img = img[:, :3]*img[:, -1:] + (1-img[:, -1:]) # blend A to RGB
 
@@ -109,7 +116,6 @@ class BlenderDataset(Dataset):
 
             sample = {'rays': rays,
                       'rgbs': img,
-                      'c2w': c2w,
-                      'valid_mask': valid_mask}
+                      'times': frame['time']}
 
         return sample
