@@ -45,8 +45,12 @@ def test_all() -> None:
                              split='test', 
                              img_wh=(args.length, args.length))
     
-    model_coarse = NeRF(in_channels_xyz=6*args.xyz_L, in_channels_dir=6*args.dir_L)
-    model_fine = NeRF(in_channels_xyz=6*args.xyz_L, in_channels_dir=6*args.dir_L)
+    model_coarse = NeRF(in_channels_xyz=6*args.xyz_L, 
+                        in_channels_dir=6*args.dir_L,
+                        in_channels_time=2*args.time_L)
+    model_fine = NeRF(in_channels_xyz=6*args.xyz_L, 
+                      in_channels_dir=6*args.dir_L,
+                      in_channels_time=2*args.time_L)
     model_coarse.load_state_dict(torch.load(f'checkpoints/{args.ckpt}/coarse/final.pth', map_location=device))
     model_fine.load_state_dict(torch.load(f'checkpoints/{args.ckpt}/fine/final.pth', map_location=device))
     
@@ -60,9 +64,11 @@ def test_all() -> None:
     for i in tqdm(range(len(testset))):
         sample = testset[i]
         rays = sample['rays'].to(device)
+        time = sample['time'].to(device)
         gt_img = torch.reshape(sample['rgbs'], (args.length, args.length, 3)).to(device)
         
         pred_img = render_image(rays=rays,
+                                time=time,
                                 batch_size=args.batch_size,
                                 img_shape=(args.length, args.length),
                                 sample_num_coarse=args.sample_num_coarse,

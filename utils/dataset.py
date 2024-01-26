@@ -116,6 +116,6 @@ class BlenderDataset(Dataset):
 
             sample = {'rays': rays,
                       'rgbs': img,
-                      'times': frame['time']}
+                      'time': frame['time']}
 
         return sample

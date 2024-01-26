@@ -89,6 +89,8 @@ def render_rays(rays: torch.Tensor,
     near = rays[0][6]
     far = rays[0][7]
     
+    assert times.shape == torch.Size([ray_num, 1])
+    
     bin_size_coarse = (far - near) / sample_num_coarse
     bin_edges_coarse = torch.linspace(near, far-bin_size_coarse, sample_num_coarse).to(device)
     bin_edges_coarse = bin_edges_coarse.repeat(ray_num, 1)
@@ -101,14 +103,13 @@ def render_rays(rays: torch.Tensor,
     xyzs_coarse = rearrange(xyzs_coarse, 'sample ray xyz -> ray sample xyz') # Shape: ray_num * sample_num_coarse * 3
     xyzs_coarse = rearrange(xyzs_coarse, 'ray sample xyz -> (ray sample) xyz') # Assume first axis is ray
     
-    # TODO: cat times
-    
     deltas_coarse = torch.diff(depths_coarse, dim=1)
     deltas_coarse = torch.cat((deltas_coarse, 1e7 * torch.ones((ray_num, 1)).to(device)), dim=1)
     
     # Encode xyz and direction
     xyz_L = int(nerf_coarse.in_channels_xyz / 6)
     dir_L = int(nerf_coarse.in_channels_dir / 6)
+    time_L = int(nerf_coarse.in_channels_time / 2)
     
     xyz_encoder = PositionalEncoding(xyz_L)
     xyz_encoded_coarse = xyz_encoder(xyzs_coarse)	# (ray_num * sample_num_coarse) * (6 * xyz_L)
@@ -117,10 +118,14 @@ def render_rays(rays: torch.Tensor,
     dir_encoded_base = dir_encoder(rays_d)
     dir_encoded_coarse = torch.repeat_interleave(dir_encoded_base, sample_num_coarse, dim=0) # (ray_num * sample_num_coarse) * (6 * dir_L)
     
-    xyz_dir_encoded_coarse = torch.cat((xyz_encoded_coarse, dir_encoded_coarse), dim=1)
+    time_encoder = PositionalEncoding(time_L)
+    time_encoded_base = time_encoder(times)
+    time_encoded_coarse = torch.repeat_interleave(time_encoded_base, sample_num_coarse, dim=0)
+    
+    xyz_dir_time_encoded_coarse = torch.cat((xyz_encoded_coarse, dir_encoded_coarse, time_encoded_coarse), dim=1)
     
     # Feed into NeRF
-    results_coarse = nerf_coarse(xyz_dir_encoded_coarse)
+    results_coarse = nerf_coarse(xyz_dir_time_encoded_coarse)
     
     # Unpack results
     rgbs_coarse = results_coarse[:, :3]
@@ -156,9 +161,11 @@ def render_rays(rays: torch.Tensor,
     
     dir_encoded_all = torch.repeat_interleave(dir_encoded_base, sample_num_coarse+sample_num_fine, dim=0) # (ray_num * sample_num_coarse) * (6 * dir_L)
     
-    xyz_dir_encoded_all = torch.cat((xyzs_encoded_all, dir_encoded_all), dim=1)
+    time_encoded_all = torch.repeat_interleave(time_encoded_base, sample_num_coarse+sample_num_fine, dim=0)
     
-    results_all = nerf_fine(xyz_dir_encoded_all, sigma_only=False)
+    xyz_dir_time_encoded_all = torch.cat((xyzs_encoded_all, dir_encoded_all, time_encoded_all), dim=1)
+    
+    results_all = nerf_fine(xyz_dir_time_encoded_all, sigma_only=False)
     
     # Unpack fine results
     rgbs_all = results_all[:, :3]
@@ -184,6 +191,7 @@ def render_rays(rays: torch.Tensor,
     
 @torch.no_grad
 def render_image(rays: torch.Tensor,
+                 time: float,
                  batch_size: int,
                  img_shape: Tuple[int, int],
                  sample_num_coarse: int,
@@ -218,6 +226,7 @@ def render_image(rays: torch.Tensor,
     rgb_batches = []
     for ray_batch in batches:
         _, rgb_batch = render_rays(ray_batch, 
+                                   time * torch.ones(ray_batch.shape[0], 1),
                                    sample_num_coarse, 
                                    sample_num_fine,
                                    nerf_coarse,

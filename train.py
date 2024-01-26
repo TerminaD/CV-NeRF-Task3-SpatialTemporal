@@ -128,6 +128,7 @@ def train() -> None:
                 print("Testing...")
                 sample = testset[0]
                 pred_img = render_image(rays=sample['rays'],
+                                        time=sample['time'],
                                         batch_size=args.batch_size,
                                         img_shape=(args.length, args.length),
                                         sample_num_coarse=args.sample_num_coarse,
